@@ -1,18 +1,45 @@
 {
   "name": "pyide",
   "build": { "dockerfile": "Dockerfile" },
-  "forwardPorts": [5173, 3000],
+
+  "forwardPorts": [5173, 3000, 11434],
+  "portsAttributes": {
+    "11434": { "label": "Ollama", "onAutoForward": "silent", "visibility": "private" }
+  },
+
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "20" }
   },
+
+  "containerEnv": {
+    // Set your default Ollama endpoint for the app to call.
+    // Use your hosted URL (recommended in Codespaces) or keep localhost if you plan to run Ollama in the container.
+    "OLLAMA_URL": "https://your-remote-ollama.example.com", 
+    // Toggle to install & run Ollama INSIDE the devcontainer (ok for demos / tiny models).
+    // Set to "1" to enable local install/start; keep "0" to use the remote endpoint above.
+    "USE_LOCAL_OLLAMA": "0",
+    // Small default model to pre-pull if USE_LOCAL_OLLAMA=1
+    "OLLAMA_BOOTSTRAP_MODEL": "phi3:mini"
+  },
+
   "postCreateCommand": "bash scripts/bootstrap.sh",
+
+  // If USE_LOCAL_OLLAMA=1, this will install/start Ollama and pull a small model.
+  "postStartCommand": "bash -lc 'if [ \"${USE_LOCAL_OLLAMA}\" = \"1\" ]; then command -v ollama >/dev/null 2>&1 || (curl -fsSL https://ollama.com/install.sh | sh); pgrep -f \"ollama serve\" >/dev/null 2>&1 || (nohup ollama serve >/tmp/ollama.log 2>&1 &); timeout 30 bash -c \"until curl -sf http://127.0.0.1:11434/api/tags >/dev/null; do sleep 1; done\"; [ -n \"${OLLAMA_BOOTSTRAP_MODEL}\" ] && ollama pull \"${OLLAMA_BOOTSTRAP_MODEL}\" || true; fi'",
+
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
         "charliermarsh.ruff",
         "ms-vscode.vscode-typescript-next"
-      ]
+      ],
+      "settings": {
+        // Surface the endpoint to your tools/extensions if helpful
+        "terminal.integrated.env.linux": {
+          "OLLAMA_URL": "${containerEnv:OLLAMA_URL}"
+        }
+      }
     }
   }
 }
