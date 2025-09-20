@@ -1,0 +1,11 @@
+{
+  "name": "pyide-server",
+  "private": true,
+  "scripts": {
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "tsx": "^4.19.2"
+  }
+}
