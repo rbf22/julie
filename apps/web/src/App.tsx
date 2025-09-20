@@ -21,7 +21,7 @@ async function callApi(endpoint, body) {
 }
 
 export default function App() {
-  const [prompt, setPrompt] = useState("Make the greeting friendlier");
+  const [prompt, setPrompt] = useState("Fix the failing test");
   const [transcript, setTranscript] = useState([]);
   const [busy, setBusy] = useState(false);
 
@@ -52,46 +52,43 @@ export default function App() {
     setBusy(true);
     log(`\n--- Agent run for prompt: "${prompt}" ---`);
 
-    // This is a mock of a real agent sequence.
-    // 1. Agent "thinks" and generates a patch.
-    const diff = `--- a/python/src/your_app/main.py
-+++ b/python/src/your_app/main.py
-@@ -1,2 +1,2 @@
- def greet(name: str) -> str:
--    return f"Hello, {name}!"
-+    return f"Well hello there, {name}! What a fine day."`;
-    log("🤖 Agent generated a patch:\n" + diff);
-
-    // 2. Preview the patch
-    log("> Previewing patch...");
     try {
+      // 1. Call the implementer agent to get a patch
+      log("🤖 Calling implementer agent...");
+      const agentResult = await callApi("/api/agent/implementer", { task: prompt });
+      if (!agentResult.ok || !agentResult.diff) {
+        throw new Error(`Agent failed to return a diff. Response: ${JSON.stringify(agentResult)}`);
+      }
+      const { diff } = agentResult;
+      log("🤖 Agent generated a patch:\n" + diff);
+
+      // 2. Preview the patch
+      log("> Previewing patch...");
       const preview = await callApi("/api/patch/preview", { diff });
       log(preview);
+      if (!preview.ok) {
+        throw new Error(`Patch preview failed. Response: ${JSON.stringify(preview)}`);
+      }
 
-      if (preview.ok) {
-        // 3. Apply the patch and commit
-        log("> Applying patch...");
-        const apply = await callApi("/api/patch/apply", { diff, gitCommitMessage: `feat: ${prompt}` });
-        log(apply);
+      // 3. Apply the patch and commit
+      log("> Applying patch...");
+      const apply = await callApi("/api/patch/apply", { diff, gitCommitMessage: `feat: ${prompt}` });
+      log(apply);
+      if (!apply.ok) {
+        throw new Error(`Failed to apply patch. Response: ${JSON.stringify(apply)}`);
+      }
 
-        if (apply.ok) {
-          // 4. Run tests to validate
-          log("> Running tests...");
-          const tests = await callApi("/api/tool/pytest", {});
-          log(tests);
-          if(tests.ok) {
-              log("✅ Agent run completed successfully.");
-          } else {
-              log("❌ Agent run failed: tests did not pass.");
-          }
-        } else {
-          log("❌ Agent run failed: could not apply patch.");
-        }
+      // 4. Run tests to validate
+      log("> Running tests...");
+      const tests = await callApi("/api/tool/pytest", {});
+      log(tests);
+      if (tests.ok) {
+        log("✅ Agent run completed successfully. Tests passed!");
       } else {
-          log("❌ Agent run failed: patch preview failed.");
+        log("⚠️ Agent run completed, but tests did not pass.");
       }
     } catch (e) {
-        log(`❌ Agent run failed:`, e.message);
+      log(`❌ Agent run failed:`, e.message);
     }
 
     setBusy(false);
