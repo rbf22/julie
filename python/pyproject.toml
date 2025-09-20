@@ -5,7 +5,13 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["ruff==0.*", "pytest==8.*", "coverage==7.*", "basedpyright==1.*", "mypy==1.*"]
+dev = [
+  "ruff==0.*",
+  "pytest==8.*",
+  "coverage==7.*",
+  "basedpyright==1.*",
+  "mypy==1.*"
+]
 
 [tool.ruff]
 line-length = 100
@@ -15,7 +21,3 @@ format.quote-style = "single"
 [tool.mypy]
 python_version = "3.11"
 strict = false
-
-[tool.uv.scripts]
-fmt = "ruff check --fix && ruff format"
-test = "pytest -q"

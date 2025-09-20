@@ -29,6 +29,8 @@ else
   echo "(!) Skipping python (folder not found)"
 fi
 
+pnpm config set ignore-scripts false || true
+
 echo ">>> Done. Next:"
 echo "    1) pnpm -C server dev"
 echo "    2) pnpm -C apps/web dev"
