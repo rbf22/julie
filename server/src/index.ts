@@ -137,10 +137,19 @@ ${testSmokeContent}
 The test \`test_greet\` is failing. Please generate a patch in the unified diff format to fix the test.
 The patch should only modify the test file to align with the implementation in \`main.py\`.
 Do not add any explanations, just the diff.
+
+An example of a diff format is:
+\`\`\`diff
+--- a/path/to/file.py
++++ b/path/to/file.py
+@@ -1,4 +1,4 @@
+-old line
++new line
+\`\`\`
 `;
 
     // 3. Call the Ollama implementer model
-    const model = "Hudson/pythia:14m-q8_0";
+    const model = "qwen2:0.5b";
     log(`Calling Ollama implementer agent (model: ${model}) for task: "${task}"`);
     const rawResponse = await callOllama(model, prompt);
     log("Ollama raw response:", rawResponse);
@@ -298,5 +307,5 @@ if (existsSync(webRoot)) {
   );
 }
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 app.listen(port, () => console.log(`Julie server on :${port}`));
