@@ -10,12 +10,13 @@ import { applyPatch, parsePatch, ParsedDiff } from "diff";
 const app = express();
 app.use(express.json());
 
-// (Optional) CORS is harmless, but we won't need it once everything is same-origin
+// CORS is harmless, but not needed once everything is same-origin
 app.use(cors({ origin: true }));
 
 // --- Helpers (path safety + run) ---
 const ROOT = resolve(process.cwd(), ".."); // repo root
 const PYROOT = resolve(ROOT, "python"); // allowed root
+
 function assertUnderPyroot(abs: string) {
   const real = resolve(abs);
   if (!real.startsWith(PYROOT + path.sep) && real !== PYROOT) {
@@ -23,7 +24,10 @@ function assertUnderPyroot(abs: string) {
   }
 }
 
-function runUv(args: string[], opts: { cwd?: string; env?: Record<string, string> } = {}) {
+function runUv(
+  args: string[],
+  opts: { cwd?: string; env?: Record<string, string> } = {}
+) {
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolveP) => {
     const child = spawn("uv", ["run", ...args], {
       cwd: opts.cwd ?? PYROOT,
@@ -49,11 +53,14 @@ function runGit(args: string[]) {
 }
 
 // --- API routes (keep these FIRST) ---
-app.get("/health", (_req, res) => res.type("text/plain").send("OK: pyide server"));
+app.get("/health", (_req, res) => res.type("text/plain").send("OK: Julie server"));
 
 app.post("/api/run", async (req, res) => {
   const { module, args = [], timeout = 20 } = req.body ?? {};
-  // Note: timeout is not implemented in runUv yet, but could be with AbortController
+  if (!module || typeof module !== "string") {
+    return res.status(400).json({ error: "missing or invalid `module`" });
+  }
+  // Note: timeout not wired yet; can be added with AbortController/spawn kill
   const result = await runUv(["python", "-m", module, ...args]);
   res.json({
     ok: result.code === 0,
@@ -71,24 +78,26 @@ app.post("/api/ai", (req, res) => {
 // --- Agent Endpoints ---
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 
-async function callOllama(model, prompt) {
+async function callOllama(model: string, prompt: string) {
   const url = `${OLLAMA_URL}/api/generate`;
   const body = JSON.stringify({ model, prompt, stream: false }); // stream: false for simplicity
+  // In Node 18+, fetch is global. If your TS config lacks DOM lib types,
+  // you can switch to: import { fetch } from "undici";
   const resp = await fetch(url, { method: "POST", body, headers: { "content-type": "application/json" } });
   if (!resp.ok) {
     const text = await resp.text().catch(() => "Failed to read error response");
     throw new Error(`Ollama API Error: ${resp.status} ${resp.statusText}\n${text}`);
   }
   const json = await resp.json();
-  return json.response; // The full response string
+  return json.response as string; // The full response string
 }
 
-function extractDiff(responseText) {
-  const match = responseText.match(/```diff\n([\s\S]*?)```/);
+function extractDiff(responseText: string) {
+  const match = responseText.match(/```diff\s*\n([\s\S]*?)```/);
   if (!match) return "";
   const diff = match[1].trim();
   try {
-    parsePatch(diff); // check if it's a valid patch
+    parsePatch(diff); // validate
     return diff;
   } catch (e) {
     log("Warning: LLM returned a response that looks like a diff but is not valid.", e);
@@ -96,9 +105,7 @@ function extractDiff(responseText) {
   }
 }
 
-// MVP Implementer Agent Endpoint
-// NOTE: This is a simplified MVP. The file paths and model are hardcoded.
-// A production system would have a more sophisticated way to select relevant files and models.
+// MVP Implementer Agent Endpoint (simplified demo)
 app.post("/api/agent/implementer", async (req, res) => {
   const { task } = req.body ?? {};
   if (!task) return res.status(400).json({ error: "missing task" });
@@ -133,7 +140,7 @@ Do not add any explanations, just the diff.
 `;
 
     // 3. Call the Ollama implementer model
-    const model = "phi3:mini";
+    const model = "Hudson/pythia:14m-q8_0";
     log(`Calling Ollama implementer agent (model: ${model}) for task: "${task}"`);
     const rawResponse = await callOllama(model, prompt);
     log("Ollama raw response:", rawResponse);
@@ -147,19 +154,18 @@ Do not add any explanations, just the diff.
 
     log("Extracted diff:", diff);
     res.json({ ok: true, diff });
-  } catch (e) {
+  } catch (e: any) {
     log("Error in /api/agent/implementer:", e);
     res.status(500).json({ error: e.message });
   }
 });
 
-// A simple logger to print to the server console
-function log(...args) {
+// Simple logger
+function log(...args: any[]) {
   console.log(`[${new Date().toISOString()}]`, ...args);
 }
 
-
-// PATCH: preview/apply (unified diff)
+// --- PATCH: preview/apply (unified diff) ---
 app.post("/api/patch/preview", async (req, res) => {
   const { diff } = req.body ?? {};
   if (typeof diff !== "string" || !diff.trim()) return res.status(400).json({ error: "missing diff" });
@@ -173,7 +179,6 @@ app.post("/api/patch/preview", async (req, res) => {
 
   const files: string[] = [];
   for (const h of parsed) {
-    // h.newFileName / h.oldFileName like "a/python/..." depending on generator
     const candidates = [h.newFileName, h.oldFileName].filter(Boolean) as string[];
     for (const c of candidates) {
       const rel = c.replace(/^a\//, "").replace(/^b\//, "");
@@ -231,10 +236,10 @@ app.post("/api/patch/apply", async (req, res) => {
     await runGit(["commit", "-m", gitCommitMessage]);
   }
 
-  return res.json({ ok: true, changed, ruff /* tests */ });
+  return res.json({ ok: true, changed, ruff /*, tests */ });
 });
 
-// Tools
+// --- Tools ---
 app.post("/api/tool/ruff", async (req, res) => {
   const { targets = ["."], fix = true } = req.body ?? {};
   const args = ["ruff", "check", ...(fix ? ["--fix"] : []), ...targets];
@@ -255,7 +260,7 @@ app.post("/api/tool/mypy", async (req, res) => {
   res.json({ ok: r.code === 0, ...r });
 });
 
-// Git Endpoints
+// --- Git Endpoints ---
 app.get("/api/git/status", async (_req, res) => {
   const r = await runGit(["status", "--porcelain"]);
   res.json({ ok: r.code === 0, ...r });
@@ -278,14 +283,20 @@ app.post("/api/git/revert", async (_req, res) => {
   res.json({ ok: r.code === 0, ...r });
 });
 
-// --- STATIC WEB (serve the built UI) ---
+// --- STATIC WEB (only serve built UI if it exists) ---
 const webRoot = resolve(process.cwd(), "../apps/web/dist");
-app.use(express.static(webRoot));
-
-// Fallback to index.html for client-side routing
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(webRoot, "index.html"));
-});
+if (existsSync(webRoot)) {
+  app.use(express.static(webRoot));
+  // Fallback to index.html for client-side routing
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(webRoot, "index.html"));
+  });
+} else {
+  console.log(
+    "[Julie] No dist found at apps/web/dist — running API-only.\n" +
+      "         Build the UI with `pnpm -C apps/web build` or run Vite dev on :5173."
+  );
+}
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`pyide server on :${port}`));
+app.listen(port, () => console.log(`Julie server on :${port}`));
