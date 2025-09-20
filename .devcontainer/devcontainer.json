@@ -2,7 +2,9 @@
   "name": "pyide",
   "build": { "dockerfile": "Dockerfile" },
   "forwardPorts": [5173, 3000],
-  "features": { },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
   "postCreateCommand": "bash scripts/bootstrap.sh",
   "customizations": {
     "vscode": {
