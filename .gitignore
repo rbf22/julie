@@ -1,0 +1,138 @@
+# ==========================
+# Core OS junk
+# ==========================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.log
+
+# ==========================
+# Node / JS / TS
+# ==========================
+node_modules/
+dist/
+build/
+.npm
+.pnpm
+.pnpm-store/
+.vscode-test/
+.next/
+out/
+.cache/
+coverage/
+
+# Vite cache
+vite.config.ts.timestamp*
+vite.config.ts.timestamp-*
+
+# Tauri build outputs
+src-tauri/target/
+src-tauri/tauri.conf.json.bak
+
+# pnpm lockfiles generated in subfolders
+pnpm-lock.yaml
+apps/*/pnpm-lock.yaml
+server/pnpm-lock.yaml
+packages/*/pnpm-lock.yaml
+
+# ==========================
+# Python / uv
+# ==========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pytest_cache/
+.pytest_cache/
+*.egg-info/
+.eggs/
+env/
+.venv/
+venv/
+.python-version
+
+# uv specific
+.uv/
+.uv-cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ==========================
+# Rust / Cargo (Tauri backend)
+# ==========================
+target/
+Cargo.lock
+*.rs.bk
+
+# ==========================
+# IDE / Editor
+# ==========================
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# ==========================
+# OS-level trash
+# ==========================
+*.tmp
+*.bak
+*.backup
+*.orig
+
+# ==========================
+# Logs and local data
+# ==========================
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# ==========================
+# Generated assets
+# ==========================
+apps/web/.vite/
+apps/web/.next/
+apps/web/.vercel/
+apps/web/.output/
+apps/web/.turbo/
+apps/web/public/build/
+
+# ==========================
+# Misc
+# ==========================
+*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Skip Python build outputs
+python/build/
+python/dist/
+python/.pytest_cache/
+python/.mypy_cache/
+python/.ruff_cache/
+python/coverage/
+
+# ==========================
+# Codespaces / Devcontainer
+# ==========================
+.devcontainer/.cache/
+.devcontainer/volume/
+.vscode-remote/
+workspaces/.codespaces/
+.vscode-server/
+
+# ==========================
+# GitHub
+# ==========================
+.github/ISSUE_TEMPLATE/*.yaml
+
+# Ignore macOS / iCloud artifacts
+.AppleDouble
+.LSOverride
+Icon?
