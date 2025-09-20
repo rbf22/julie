@@ -156,7 +156,7 @@ curl http://localhost:11434/api/generate   -d '{"model":"llama3:8b","prompt":"He
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│                     Python Workspace                     │
+│                     Python Workspace                    │
 │                                                         │
 │  python/                                                │
 │   └── src/julie_app/                                    │
