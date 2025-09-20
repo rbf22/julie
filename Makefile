@@ -29,8 +29,8 @@ install-python:
 
 install-ollama:
 	@echo ">>> Pulling Ollama models (optional)..."
-	-ollama pull llama3:8b || true
-	-ollama pull codellama:13b || true
+	-ollama pull Hudson/pythia:14m-q8_0 || true
+	-ollama pull Hudson/pythia:70m-q8_0 || true
 
 # Two-port dev: Vite on 5173 + API server on 3000
 dev:
