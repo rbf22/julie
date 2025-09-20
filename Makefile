@@ -2,7 +2,7 @@
 PYTHON_DIR=python
 SERVER_DIR=server
 WEB_DIR=apps/web
-BACKEND_URL=http://localhost:3000
+BACKEND_URL=http://localhost:3001
 TEST_NAME=Valeria
 
 .DEFAULT_GOAL := help
@@ -22,7 +22,7 @@ install: install-js install-python
 	@echo "✅ Julie deps ready."
 
 install-js:
-	pnpm install --filter $(SERVER_DIR) --filter $(WEB_DIR)
+	pnpm install
 
 install-python:
 	cd $(PYTHON_DIR) && uv sync
