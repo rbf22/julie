@@ -1,5 +1,5 @@
 def greet(name: str) -> str:
-    return f"Hello, {name}!"
+    return f"Well hello there, {name}! What a fine day."
 
 if __name__ == "__main__":
     import sys
