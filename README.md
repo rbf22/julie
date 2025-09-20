@@ -1,262 +1,316 @@
-# julie
+# **Julie** – Agent-Driven Python Development Environment
 
-Edits come only from agent personas (not humans in the UI), we cann have a slim UI and beefy tooling API + patch pipeline. Here’s a crisp MVP plan and code you can paste to get there fast.
+> *A structured, agent-first environment for building, testing, and deploying Python code with precision and safety.*
 
-Where you are (quick)
-	•	Single-origin app on :3000 serving the web UI.
-	•	/api/run executes uv run python -m <module> … with PYTHONPATH=src.
-	•	Python project scaffold + uv env.
-	•	Minimal web UI that can issue a run.
+---
 
-Target MVP (agent-first)
+## **Overview**
 
-A thin console UI for prompts + run output, and a toolbox API the agents call to:
-	1.	Plan: propose changes as patches.
-	2.	Apply: apply unified diffs safely inside python/.
-	3.	Validate: run ruff, pytest, optional mypy.
-	4.	Execute: run modules/entrypoints.
-	5.	Transact: auto-commit to Git with traceable messages.
-	6.	Rollback: revert last change set.
+**Julie** is a next-generation, **AI-driven coding environment** designed to be more **structured and auditable** than free-form coding assistants like ChatGPT or Google Jules.  
+It focuses exclusively on **Python projects**, providing a secure, sandboxed environment where **AI agents** plan, generate, modify, and execute code safely using well-defined **tools**.
 
-No manual editor needed.
+Instead of editing files directly, agents operate like a **team of specialists**:
+- **Planner** decides *what* needs to be done.
+- **Implementer** writes and edits the code.
+- **Reviewer** checks quality and safety.
+- **Tester** validates correctness with automated tests.
 
-⸻
+Every step is captured as an **auditable, reproducible trail**:
+```
+Plan → Patch → Test → Run → Commit
+```
 
-API surface (server)
+This structured workflow gives humans **visibility and trust**, while empowering AI to take on complex tasks autonomously.
 
-Add these HTTP endpoints (all same-origin, JSON). I’ll show code for the key ones.
-	•	POST /api/plan (optional): store agent plan text.
-	•	POST /api/patch/preview: validate a unified diff against repo.
-	•	POST /api/patch/apply: apply diff (idempotent, within allowlist), return changed files.
-	•	POST /api/tool/ruff: run ruff (all or subset).
-	•	POST /api/tool/pytest: run pytest (all or -k/-m filters).
-	•	POST /api/tool/mypy: (optional) type check.
-	•	POST /api/run: (you already have) run module/args.
-	•	POST /api/git/commit: commit with message/author; GET /api/git/status, POST /api/git/revert.
-	•	GET /api/fs/allowlist: return allowed root (e.g., python/).
+---
 
-Implementation notes
-	•	Enforce allowlist: all file writes must stay under python/.
-	•	Accept unified diff strings. Safer and audit-friendly than sending whole file bodies.
-	•	Before apply, run dry checks: paths canonicalization, no symlinks, no ...
-	•	After apply, run ruff –fix, then (optionally) pytest -q. Return diagnostics.
+## **Why This Matters**
 
-⸻
+Traditional LLM coding workflows:
+- Are **free-form** — agents or humans can do anything, anywhere, in any file.
+- Lack **safety rails** — bugs or dangerous changes can slip through unnoticed.
+- Are hard to **audit** after the fact.
 
-Paste-ready code (server/src/index.ts additions)
+By contrast, **Julie**:
+- Restricts all edits to a controlled **Python workspace** (`python/` folder).
+- Requires every modification to arrive as a **unified diff** (like a Git patch).
+- Automatically **formats**, **lints**, and **tests** every change before it’s applied.
+- Stores an explicit **action log** for every agent decision.
 
-Helpers (path safety + run)
+Think of it as the **"Amazon Kiro"** model applied to open source:
+a clean, safe, auditable development environment for both humans and AI agents.
 
-import fs from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { spawn } from "node:child_process";
+---
 
-const ROOT = resolve(process.cwd(), "..");          // repo root
-const PYROOT = resolve(ROOT, "python");            // allowed root
-function assertUnderPyroot(abs: string) {
-  const real = resolve(abs);
-  if (!real.startsWith(PYROOT + path.sep) && real !== PYROOT) {
-    throw new Error(`Path outside allowed root: ${real}`);
-  }
-}
+## **Ollama-Powered Agents**
 
-function runUv(args: string[], opts: { cwd?: string; env?: Record<string,string> } = {}) {
-  return new Promise<{code:number;stdout:string;stderr:string}>((resolveP) => {
-    const child = spawn("uv", ["run", ...args], {
-      cwd: opts.cwd ?? PYROOT,
-      env: { ...process.env, PYTHONPATH: resolve(PYROOT, "src"), ...(opts.env ?? {}) }
-    });
-    let out = "", err = "";
-    child.stdout.on("data", b => out += b.toString());
-    child.stderr.on("data", b => err += b.toString());
-    child.on("close", code => resolveP({ code: code ?? 1, stdout: out, stderr: err }));
-  });
-}
+### **Why Ollama**
+[Ollama](https://ollama.ai/) is a lightweight, local LLM serving layer for running open-source models like LLaMA 3, CodeLLaMA, Mistral, and DeepSeek.  
+It’s ideal for Julie because it provides:
+- **Fully local and private execution** — no external API keys required.
+- Ability to run **multiple models**, one per agent persona.
+- **Streaming responses** with low latency.
+- Easy scaling for **multi-agent orchestration**.
 
-PATCH: preview/apply (unified diff)
+This lets Julie operate entirely offline or on private infrastructure while maintaining strong performance.
 
-import { createPatch, applyPatch, ParsedDiff, parsePatch } from "diff"; // pnpm add diff
+---
 
-// Preview: validates the diff touches only allowed files, returns file list
-app.post("/api/patch/preview", async (req, res) => {
-  const { diff } = req.body ?? {};
-  if (typeof diff !== "string" || !diff.trim()) return res.status(400).json({ error: "missing diff" });
+### **Agent Roles**
 
-  let parsed: ParsedDiff[];
-  try { parsed = parsePatch(diff); } catch (e:any) { return res.status(400).json({ error: "parse failed", detail: String(e) }); }
+| Agent         | Example Model        | Responsibilities |
+|---------------|----------------------|-----------------|
+| **Planner**   | `llama3:8b` or `mistral:7b` | Break down high-level tasks into a clear execution plan |
+| **Implementer** | `codellama:13b` or `deepseek-coder:6.7b` | Generate code and patches for the Python workspace |
+| **Reviewer**  | `llama3:8b-instruct` | Analyze patches for quality, safety, and style issues |
+| **Tester**    | Same as Reviewer     | Create new tests and validate coverage |
 
-  const files: string[] = [];
-  for (const h of parsed) {
-    // h.newFileName / h.oldFileName like "a/python/..." depending on generator
-    const candidates = [h.newFileName, h.oldFileName].filter(Boolean) as string[];
-    for (const c of candidates) {
-      const rel = c.replace(/^a\//,"").replace(/^b\//,"");
-      const abs = resolve(ROOT, rel);
-      try { assertUnderPyroot(abs); } catch (e:any) { return res.status(400).json({ error: e.message, file: rel }); }
-      if (!files.includes(rel)) files.push(rel);
-    }
-  }
-  return res.json({ ok: true, files });
-});
+Each agent runs in **its own Ollama session**, connected via Julie’s backend.
 
-// Apply: actually patches files (line-based). In practice, you may prefer git apply.
-app.post("/api/patch/apply", async (req, res) => {
-  const { diff, gitCommitMessage } = req.body ?? {};
-  if (typeof diff !== "string" || !diff.trim()) return res.status(400).json({ error: "missing diff" });
+---
 
-  let parsed: ParsedDiff[];
-  try { parsed = parsePatch(diff); } catch (e:any) { return res.status(400).json({ error: "parse failed", detail: String(e) }); }
+### **How Julie Integrates With Ollama**
 
-  const changed: string[] = [];
-  for (const h of parsed) {
-    const relOld = (h.oldFileName ?? "").replace(/^a\//,"");
-    const relNew = (h.newFileName ?? "").replace(/^b\//,"");
-    const rel = relNew || relOld;
-    if (!rel) continue;
+1. **Julie connects to Ollama** via its local HTTP API (`http://localhost:11434`).
+2. Each agent role has:
+   - A **prompt template** describing its unique responsibilities.
+   - Access to a subset of Julie’s **tool APIs** (`pytest`, `ruff`, `uv`, etc.).
+3. A task flows like this:
+   - Planner generates a **step-by-step plan**.
+   - Implementer generates a **patch (diff)**.
+   - Reviewer evaluates it.
+   - Tester runs validations.
+   - Julie applies the patch and logs all outputs.
 
-    const abs = resolve(ROOT, rel);
-    assertUnderPyroot(abs);
-
-    const prev = existsSync(abs) ? await fs.readFile(abs, "utf8") : "";
-    const next = applyPatch(prev, h);
-    if (next === false) {
-      return res.status(409).json({ error: "patch failed to apply cleanly", file: rel });
-    }
-    await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, next, "utf8");
-    changed.push(rel);
-  }
-
-  // Optionally auto-format with ruff
-  const ruff = await runUv(["ruff", "check", "--fix"]);
-  // Optional: run tests quick smoke
-  // const tests = await runUv(["pytest", "-q"]);
-
-  // Optional commit
-  if (gitCommitMessage) {
-    await runGit(["add", ...changed]);
-    await runGit(["commit", "-m", gitCommitMessage]);
-  }
-
-  return res.json({ ok: true, changed, ruff, /* tests */ });
-});
-
-function runGit(args: string[]) {
-  return new Promise<{code:number;stdout:string;stderr:string}>((resolveP) => {
-    const child = spawn("git", args, { cwd: ROOT });
-    let out="", err="";
-    child.stdout.on("data", b=> out+=b.toString());
-    child.stderr.on("data", b=> err+=b.toString());
-    child.on("close", code => resolveP({ code: code ?? 1, stdout: out, stderr: err }));
-  });
-}
-
-Tools
-
-app.post("/api/tool/ruff", async (req, res) => {
-  const { targets = ["."], fix = true } = req.body ?? {};
-  const args = ["ruff", "check", ...(fix ? ["--fix"] : []), ...targets];
-  const r = await runUv(args);
-  res.json({ ok: r.code === 0, ...r });
-});
-
-app.post("/api/tool/pytest", async (req, res) => {
-  const { k, m, args = [] } = req.body ?? {};
-  const full = ["pytest", "-q", ...(k ? ["-k", k] : []), ...(m ? ["-m", m] : []), ...args];
-  const r = await runUv(full);
-  res.json({ ok: r.code === 0, ...r });
-});
-
-app.post("/api/tool/mypy", async (req, res) => {
-  const { paths = ["src/"] } = req.body ?? {};
-  const r = await runUv(["mypy", ...paths]);
-  res.json({ ok: r.code === 0, ...r });
-});
-
-
-⸻
-
-Agent contract (how agents talk to your tools)
-
-1) Propose patch
-
-Agent sends a unified diff with context (git-style OK):
-
-POST /api/patch/preview
-{ "diff": "diff --git a/python/src/your_app/main.py b/python/src/your_app/main.py\n--- a/python/src/your_app/main.py\n+++ b/python/src/your_app/main.py\n@@\n-    print(f\"Hello, {name}!\")\n+    print(f\"Hello there, {name}! 👋\")\n" }
-
-If OK → POST /api/patch/apply with same diff and commit message:
-
+Example request to the Implementer agent:
+```json
 {
-  "diff": "...",
-  "gitCommitMessage": "feat: friendlier greeting"
+  "task": "Add fibonacci function",
+  "context": {
+    "files": ["utils.py"],
+    "tests": ["test_utils.py"]
+  },
+  "tools": ["pytest", "ruff"]
 }
+```
 
-2) Validate
+Agent response:
+```json
+{
+  "diff": "diff --git a/python/src/julie_app/utils.py ..."
+}
+```
 
-POST /api/tool/ruff       → auto-fix & lint
-POST /api/tool/pytest     → run tests
-POST /api/tool/mypy       → type check (optional)
+---
 
-3) Execute
+### **Ollama Configuration**
 
-POST /api/run
-{ "module":"your_app.main", "args":["World"], "timeout": 20 }
+Julie expects several models to be available in Ollama.
 
-The agent loop: plan → patch → lint → test → run → repeat.
-You can store plan text in your own agent memory; the server doesn’t need to.
+Example `ollama.yaml`:
+```yaml
+models:
+  - name: planner
+    model: llama3:8b
+  - name: implementer
+    model: codellama:13b
+  - name: reviewer
+    model: llama3:8b-instruct
+```
 
-⸻
+Start Ollama:
+```bash
+ollama serve
+```
 
-Minimal UI for humans
+Verify it works:
+```bash
+curl http://localhost:11434/api/generate   -d '{"model":"llama3:8b","prompt":"Hello from Julie"}'
+```
 
-Just a console page with:
-	•	a prompt box (“What should I do?”),
-	•	a transcript area showing tool calls + outputs,
-	•	buttons for Run last module, Run tests, Lint,
-	•	a “Change set” log (list of last N commits with diffs).
+---
 
-This keeps UX simple while letting personas drive everything.
+## **High-Level Architecture**
 
-⸻
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Julie Frontend                     │
+│                                                         │
+│  - Minimal console UI                                   │
+│  - Displays agent plans, patches, test results          │
+│  - Transparent logs and audit trail                     │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                      Julie Backend                      │
+│                                                         │
+│  - Python sandbox execution with uv                     │
+│  - Patch application and validation                     │
+│  - Tool APIs: pytest, ruff, mypy                        │
+│  - Git versioning and rollback                          │
+│  - **Ollama agent orchestration**                       │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                     Python Workspace                     │
+│                                                         │
+│  python/                                                │
+│   └── src/julie_app/                                    │
+│       ├── main.py                                       │
+│       └── ...                                           │
+│                                                         │
+│  All code lives here.                                   │
+│  Tests, modules, and configs are isolated and versioned │
+└─────────────────────────────────────────────────────────┘
+```
 
-Safety rails
-	•	Absolute allowlist (python/) for writes; reject symlinks/.. escapes.
-	•	Require unified diffs, not arbitrary shell commands.
-	•	Enforce timeouts and cap stdout length.
-	•	(Optional) Gate /api/patch/apply behind a “preview → apply” two-step to catch path mistakes.
-	•	(Optional) “dry run” mode for pytest: pytest --collect-only to smoke-check tests.
+---
 
-⸻
+## **Example Agent Workflow**
 
-What to implement next (in order)
-	1.	Add the patch preview/apply endpoints (above), install deps:
+1. **Planner Agent**
+   ```
+   POST /api/agent/planner
+   {
+     "goal": "Add Fibonacci calculator",
+     "context": "Project uses pytest and utils.py for math functions."
+   }
+   ```
+   Returns:
+   ```json
+   {
+     "plan": [
+       "1. Add fibonacci function to utils.py",
+       "2. Add test cases to test_utils.py",
+       "3. Run pytest to confirm everything passes"
+     ]
+   }
+   ```
 
-pnpm -C server add diff
+2. **Implementer Agent**
+   ```
+   POST /api/agent/implementer
+   {
+     "task": "Implement fibonacci function",
+     "files": ["utils.py"]
+   }
+   ```
+   Returns:
+   ```json
+   {
+     "diff": "diff --git a/python/src/julie_app/utils.py ..."
+   }
+   ```
 
+3. **Reviewer Agent**
+   ```
+   POST /api/agent/reviewer
+   {
+     "diff": "...",
+     "tests": ["test_utils.py"]
+   }
+   ```
+   Returns:
+   ```json
+   {
+     "feedback": "Code quality is good, but add edge-case tests."
+   }
+   ```
 
-	2.	Add ruff/pytest/mypy tool endpoints.
-	3.	Add git helpers (commit, status, revert last).
-	4.	Trim the web UI to a console that can trigger those endpoints and render outputs (no Monaco).
-	5.	Write a simple Agent driver (can be a script or a button that posts a prompt to /api/ai, then calls tools in sequence based on rules).
-	6.	Add a tests sample: one pass, one fail — verify the agent surfaces failures and iterates.
+4. Julie applies the patch, runs `pytest` and `ruff`, and displays the final result in the web UI.
 
-⸻
+---
 
-Example: one-button “Agent run” (pseudo)
+## **Getting Started**
 
-The UI sends a prompt to /api/ai → your front-end agent interprets → calls:
+### 1. Install Ollama
+MacOS:
+```bash
+brew install ollama
+```
 
-/api/patch/preview  (if ok)
-/api/patch/apply
-/api/tool/ruff
-/api/tool/pytest
-/api/run  (if needed)
+Linux:
+```bash
+curl https://ollama.ai/install.sh | sh
+```
 
-Log each step in the transcript area with stdout/stderr. If pytest fails, the agent proposes another diff and repeats.
+Windows:
+- Download installer from [ollama.ai](https://ollama.ai).
 
-⸻
+### 2. Pull Required Models
+```bash
+ollama pull llama3:8b
+ollama pull codellama:13b
+```
 
-If you want, I can:
-	•	generate a tiny console UI that sequences these calls,
-	•	or add git status/commit/revert endpoints right now.
+### 3. Start Ollama
+```bash
+ollama serve
+```
+
+### 4. Start Julie
+In one terminal:
+```bash
+pnpm -C server dev
+```
+
+In another terminal:
+```bash
+pnpm -C apps/web build
+pnpm -C server dev
+```
+
+Open the browser at:
+```
+http://localhost:3000
+```
+
+---
+
+## **Tech Stack**
+
+| Layer        | Tech |
+|--------------|------|
+| **Frontend** | React + Vite + Zustand |
+| **Backend**  | Node.js + Express |
+| **Agents**   | Ollama (local LLMs: LLaMA3, CodeLLaMA, Mistral) |
+| **Python Env** | uv, pytest, ruff, mypy |
+| **Version Control** | Git |
+| **Deployment** | GitHub Codespaces, Docker |
+
+---
+
+## **Roadmap**
+
+| Phase | Goal |
+|-------|------|
+| **0.1 MVP** | Implementer agent generates and runs Python code patches |
+| **0.2** | Add Planner and Reviewer agents for structured workflows |
+| **0.3** | Full multi-agent orchestration and conflict resolution |
+| **0.4** | Secure remote agent hosting and authentication |
+| **0.5** | Human-in-the-loop review mode with advanced diff visualization |
+
+---
+
+## **Philosophy**
+
+1. **Agents should have narrow roles and clear tools**  
+2. **Local-first execution with Ollama ensures privacy**  
+3. **All outputs are structured and auditable**  
+4. **Nothing runs without passing validation and tests**  
+5. **Start with Python, design for multi-language support later**
+
+---
+
+## **Summary**
+
+Julie is your **structured, agent-first Python development partner**, combining:
+- **Ollama-powered AI agents** for planning, coding, reviewing, and testing.
+- A **sandboxed Python environment** for safe and isolated execution.
+- A **transparent, auditable process** for every code change.
+
+By focusing on privacy, structure, and accountability, Julie provides a safe alternative to free-form LLM coding assistants—bringing the vision of **Google Jules** and **Amazon Kiro** to open source development.
