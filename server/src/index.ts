@@ -68,6 +68,97 @@ app.post("/api/ai", (req, res) => {
   res.json({ completion: `MOCK: ${String(prompt ?? "").slice(0, 64)}...` });
 });
 
+// --- Agent Endpoints ---
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+
+async function callOllama(model, prompt) {
+  const url = `${OLLAMA_URL}/api/generate`;
+  const body = JSON.stringify({ model, prompt, stream: false }); // stream: false for simplicity
+  const resp = await fetch(url, { method: "POST", body, headers: { "content-type": "application/json" } });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "Failed to read error response");
+    throw new Error(`Ollama API Error: ${resp.status} ${resp.statusText}\n${text}`);
+  }
+  const json = await resp.json();
+  return json.response; // The full response string
+}
+
+function extractDiff(responseText) {
+  const match = responseText.match(/```diff\n([\s\S]*?)```/);
+  if (!match) return "";
+  const diff = match[1].trim();
+  try {
+    parsePatch(diff); // check if it's a valid patch
+    return diff;
+  } catch (e) {
+    log("Warning: LLM returned a response that looks like a diff but is not valid.", e);
+    return "";
+  }
+}
+
+// MVP Implementer Agent Endpoint
+// NOTE: This is a simplified MVP. The file paths and model are hardcoded.
+// A production system would have a more sophisticated way to select relevant files and models.
+app.post("/api/agent/implementer", async (req, res) => {
+  const { task } = req.body ?? {};
+  if (!task) return res.status(400).json({ error: "missing task" });
+
+  try {
+    // 1. Read relevant files
+    const mainPyPath = resolve(PYROOT, "src/your_app/main.py");
+    const testSmokePath = resolve(PYROOT, "tests/test_smoke.py");
+    const mainPyContent = await fs.readFile(mainPyPath, "utf8");
+    const testSmokeContent = await fs.readFile(testSmokePath, "utf8");
+
+    // 2. Construct the prompt for the agent
+    const prompt = `
+You are an expert Python developer. Your task is to fix a failing test.
+The user wants to: "${task}"
+
+Here are the relevant files:
+
+File: \`python/src/your_app/main.py\`
+\`\`\`python
+${mainPyContent}
+\`\`\`
+
+File: \`python/tests/test_smoke.py\`
+\`\`\`python
+${testSmokeContent}
+\`\`\`
+
+The test \`test_greet\` is failing. Please generate a patch in the unified diff format to fix the test.
+The patch should only modify the test file to align with the implementation in \`main.py\`.
+Do not add any explanations, just the diff.
+`;
+
+    // 3. Call the Ollama implementer model
+    const model = "phi3:mini";
+    log(`Calling Ollama implementer agent (model: ${model}) for task: "${task}"`);
+    const rawResponse = await callOllama(model, prompt);
+    log("Ollama raw response:", rawResponse);
+
+    // 4. Extract the diff from the response
+    const diff = extractDiff(rawResponse);
+    if (!diff) {
+      log("No diff found in response");
+      return res.status(500).json({ error: "Agent did not return a valid diff.", details: rawResponse });
+    }
+
+    log("Extracted diff:", diff);
+    res.json({ ok: true, diff });
+  } catch (e) {
+    log("Error in /api/agent/implementer:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// A simple logger to print to the server console
+function log(...args) {
+  console.log(`[${new Date().toISOString()}]`, ...args);
+}
+
+
 // PATCH: preview/apply (unified diff)
 app.post("/api/patch/preview", async (req, res) => {
   const { diff } = req.body ?? {};
